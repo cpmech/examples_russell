@@ -1,20 +1,40 @@
-use plotpy::{Curve, Plot};
-use russell_lab::algo::InterpLagrange;
+use plotpy::{Curve, Plot, SuperTitleParams};
+use russell_lab::algo::{InterpGrid, InterpLagrange, InterpParams};
 use russell_lab::math::PI;
 use russell_lab::{mat_vec_mul, StrError, Vector};
 use russell_ode::{no_jacobian, HasJacobian, Method, OdeSolver, Params, System};
+
+const PATH_KEY: &str = "/tmp/examples_russell/pde_1d_heat_spectral_collocation";
 
 struct Args {
     interp: InterpLagrange,
 }
 
-fn main() -> Result<(), StrError> {
-    // polynomial degree and number of points
-    let nn = 8;
-    let npoint = nn + 1;
-
+/// Runs the analysis with polynomial degree N (nn)
+///
+/// Returns `(err_f, err_g, err_h)`
+///
+/// # Input
+///
+/// * `nn` -- polynomial degree `N`
+/// * `grid_type` -- the type of grid
+/// * `do_plot` -- generate plot
+/// * `calc_errors` -- calculate the interpolation and derivative errors
+///
+/// # Output
+///
+/// * `err_f` -- the interpolation error
+/// * `err_g` -- the first derivative error
+/// * `err_h` -- the second derivative error
+fn run(
+    nn: usize,
+    grid_type: InterpGrid,
+    print_stats: bool,
+    do_plot: bool,
+    calc_errors: bool,
+) -> Result<(f64, f64, f64), StrError> {
     // ODE system
-    let ndim = npoint;
+    let ndim = nn + 1;
     let system = System::new(
         ndim,
         |dudt: &mut Vector, _: f64, u: &Vector, args: &mut Args| {
@@ -30,12 +50,15 @@ fn main() -> Result<(), StrError> {
     );
 
     // ODE solver
-    let params = Params::new(Method::DoPri8);
+    let mut params = Params::new(Method::DoPri8);
+    params.set_tolerances(1e-10, 1e-10, None)?;
     let mut ode = OdeSolver::new(params, &system)?;
 
     // arguments for the system
+    let mut par = InterpParams::new();
+    par.grid_type = grid_type;
     let mut args = Args {
-        interp: InterpLagrange::new(nn, None)?,
+        interp: InterpLagrange::new(nn, Some(par))?,
     };
 
     // initial conditions
@@ -47,23 +70,91 @@ fn main() -> Result<(), StrError> {
     ode.solve(&mut uu, t0, t1, None, None, &mut args)?;
 
     // print stats
-    println!("{}", ode.stats());
+    if print_stats {
+        println!("\n================================================================");
+        println!("N (polynomial degree)            = {}", nn);
+        println!("Grid type                        = {:?}", grid_type);
+        println!("{}", ode.stats());
+    }
+
+    // calc errors
+    let f = |x| -f64::exp(-PI * PI * t1) * f64::sin(PI * x);
+    let g = |x| -f64::exp(-PI * PI * t1) * f64::cos(PI * x) * PI;
+    let h = |x| f64::exp(-PI * PI * t1) * f64::sin(PI * x) * PI * PI;
+    let (err_f, err_g, err_h) = if calc_errors {
+        args.interp.estimate_max_error(true, f, g, h)
+    } else {
+        (0.0, 0.0, 0.0)
+    };
 
     // plot the results @ t1
-    let mut curve1 = Curve::new();
-    let mut curve2 = Curve::new();
-    let xx_ana = Vector::linspace(-1.0, 1.0, 201)?;
-    let uu_ana = xx_ana.get_mapped(|x| -f64::exp(-PI * PI * t1) * f64::sin(PI * x));
-    curve1.draw(xx_ana.as_data(), uu_ana.as_data());
-    curve2
-        .set_line_style("None")
-        .set_marker_style("o")
-        .set_marker_void(true)
-        .draw(xx.as_data(), uu.as_data());
+    if do_plot {
+        let mut curve1 = Curve::new();
+        let mut curve2 = Curve::new();
+        let xx_ana = Vector::linspace(-1.0, 1.0, 201)?;
+        let uu_ana = xx_ana.get_mapped(f);
+        curve1.draw(xx_ana.as_data(), uu_ana.as_data());
+        curve2
+            .set_line_style("None")
+            .set_marker_style("o")
+            .set_marker_void(true)
+            .draw(xx.as_data(), uu.as_data());
+        let mut plot = Plot::new();
+        let gt = format!("{:?}", grid_type);
+        let path = format!("{}_nn{}_{}.svg", PATH_KEY, nn, gt.to_lowercase(),);
+        plot.add(&curve1)
+            .add(&curve2)
+            .grid_and_labels("$x$", "$u(x)$")
+            .save(path.as_str())?;
+    }
+    Ok((err_f, err_g, err_h))
+}
+
+fn main() -> Result<(), StrError> {
+    // plot solutions
+    run(12, InterpGrid::Uniform, true, true, false)?;
+    run(12, InterpGrid::ChebyshevGauss, true, true, false)?;
+    run(12, InterpGrid::ChebyshevGaussLobatto, true, true, false)?;
+
+    // error analysis
+    println!("\n... error analysis ...");
+    let mut curve_f = Curve::new();
+    let mut curve_g = Curve::new();
+    let mut curve_h = Curve::new();
+    curve_g.set_line_color("gold");
+    curve_h.set_line_color("red");
+    let mut nn_values = Vec::new();
+    let mut ef_values = Vec::new();
+    let mut eg_values = Vec::new();
+    let mut eh_values = Vec::new();
+    let grid_type = InterpGrid::ChebyshevGaussLobatto;
+    for nn in (4..40).step_by(2) {
+        let (err_f, err_g, err_h) = run(nn, grid_type, false, false, true)?;
+        nn_values.push(nn as f64);
+        ef_values.push(err_f);
+        eg_values.push(err_g);
+        eh_values.push(err_h);
+    }
+    curve_f.draw(&nn_values, &ef_values);
+    curve_g.draw(&nn_values, &eg_values);
+    curve_h.draw(&nn_values, &eh_values);
     let mut plot = Plot::new();
-    plot.add(&curve1)
-        .add(&curve2)
-        .grid_and_labels("$x$", "$u(x)$")
-        .save("/tmp/examples_russell/pde_1d_heat_spectral_collocation.svg")?;
+    let mut spp = SuperTitleParams::new();
+    spp.set_y(0.95);
+    plot.set_subplot(3, 1, 1)
+        .set_log_y(true)
+        .add(&curve_f)
+        .grid_and_labels("$N$", "$err(f)$")
+        .set_subplot(3, 1, 2)
+        .set_log_y(true)
+        .add(&curve_g)
+        .grid_and_labels("$N$", "$err(g)$")
+        .set_subplot(3, 1, 3)
+        .set_log_y(true)
+        .add(&curve_h)
+        .grid_and_labels("$N$", "$err(h)$")
+        .set_figure_size_points(400.0, 600.0)
+        .set_super_title(format!("{:?}", grid_type).as_str(), Some(spp))
+        .save(format!("{}_errors.svg", PATH_KEY).as_str())?;
     Ok(())
 }
