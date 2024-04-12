@@ -38,7 +38,7 @@ fn run(
     let system = System::new(
         ndim,
         |dudt: &mut Vector, _: f64, u: &Vector, args: &mut Args| {
-            mat_vec_mul(dudt, 1.0, args.interp.get_dd2(), u)?;
+            mat_vec_mul(dudt, 1.0, args.interp.get_dd2()?, u)?;
             dudt[0] = 0.0; // homogeneous boundary conditions
             dudt[nn] = 0.0; // homogeneous boundary conditions
             Ok(())
@@ -54,12 +54,13 @@ fn run(
     params.set_tolerances(1e-10, 1e-10, None)?;
     let mut ode = OdeSolver::new(params, &system)?;
 
-    // arguments for the system
+    // interpolant
     let mut par = InterpParams::new();
     par.grid_type = grid_type;
     let mut args = Args {
         interp: InterpLagrange::new(nn, Some(par))?,
     };
+    args.interp.calc_dd2_matrix();
 
     // initial conditions
     let (t0, t1) = (0.0, 0.1);
