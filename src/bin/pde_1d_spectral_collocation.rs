@@ -1,7 +1,7 @@
 use plotpy::{Curve, Plot};
 use russell_lab::algo::{InterpLagrange, InterpParams};
 use russell_lab::math::NAPIER;
-use russell_lab::{solve_lin_sys, vec_max_abs_diff, Matrix, StrError, Vector};
+use russell_lab::{format_scientific, solve_lin_sys, vec_max_abs_diff, Matrix, StrError, Vector};
 
 const PATH_KEY: &str = "/tmp/examples_russell/pde_1d_spectral_collocation";
 
@@ -35,12 +35,6 @@ const PATH_KEY: &str = "/tmp/examples_russell/pde_1d_spectral_collocation";
 //   Meudon, 14-18 November 2005
 
 fn main() -> Result<(), StrError> {
-    // analytical solution
-    const CC: f64 = -4.0 * NAPIER / (1.0 + NAPIER * NAPIER);
-    let sh1 = f64::sinh(1.0);
-    let sh2 = f64::sinh(2.0);
-    let solution = |x| f64::exp(x) - f64::exp(2.0 * x) * sh1 / sh2 + CC / 4.0;
-
     // interpolant
     let nn = 4;
     let params = InterpParams::new();
@@ -55,10 +49,7 @@ fn main() -> Result<(), StrError> {
     // source term (right-hand side)
     let xx = interp.get_points();
     let npoint = xx.dim();
-    let mut b = Vector::new(npoint);
-    for i in 0..npoint {
-        b[i] = f64::exp(xx[i]) + CC;
-    }
+    let mut b = Vector::initialized(npoint, |i| f64::exp(xx[i]) + CC);
     b[0] = 0.0;
     b[nn] = 0.0;
 
@@ -77,10 +68,18 @@ fn main() -> Result<(), StrError> {
     solve_lin_sys(&mut b, &mut aa)?;
     let uu = &b;
 
+    // analytical solution
+    const CC: f64 = -4.0 * NAPIER / (1.0 + NAPIER * NAPIER);
+    let sh1 = f64::sinh(1.0);
+    let sh2 = f64::sinh(2.0);
+    let solution = |x| f64::exp(x) - f64::exp(2.0 * x) * sh1 / sh2 + CC / 4.0;
+
     // error at nodes
     let uu_ana = xx.get_mapped(solution);
     let max_diff = vec_max_abs_diff(&uu, &uu_ana)?;
-    println!("max diff = {}", max_diff.1);
+    println!("max diff = {}", format_scientific(max_diff.1, 10, 2));
+
+    // --------------------------------------------------------------------
 
     // plot
     let mut curve_num1 = Curve::new();
