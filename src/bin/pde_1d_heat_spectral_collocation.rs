@@ -18,6 +18,7 @@ struct Args {
 ///
 /// * `nn` -- polynomial degree `N`
 /// * `grid_type` -- the type of grid
+/// * `print_stats` -- prints the ODE solver
 /// * `do_plot` -- generate plot
 /// * `calc_errors` -- calculate the interpolation and derivative errors
 ///
@@ -83,7 +84,7 @@ fn run(
     let g = |x| -f64::exp(-PI * PI * t1) * f64::cos(PI * x) * PI;
     let h = |x| f64::exp(-PI * PI * t1) * f64::sin(PI * x) * PI * PI;
     let (err_f, err_g, err_h) = if calc_errors {
-        args.interp.estimate_max_error(true, f, g, h)
+        args.interp.estimate_max_error_all(true, f, g, h)
     } else {
         (0.0, 0.0, 0.0)
     };
