@@ -1,43 +1,62 @@
 use plotpy::{Curve, Plot};
-use russell_lab::algo::{InterpLagrange, InterpParams};
+use russell_lab::algo::{InterpGrid, InterpLagrange, InterpParams};
 use russell_lab::math::NAPIER;
-use russell_lab::{format_scientific, solve_lin_sys, vec_max_abs_diff, Matrix, StrError, Vector};
+use russell_lab::{solve_lin_sys, Matrix, StrError, Vector};
 
-const PATH_KEY: &str = "/tmp/examples_russell/pde_1d_spectral_collocation";
+const PATH_KEY: &str = "/tmp/examples_russell/pde_1d_lorene_spectral_collocation";
 
-// LORENE example (page 25 of Reference)
-//
-// PDE:
-//
-// d²u     du          x
-// ——— - 4 —— + 4 u = e  + C
-// dx²     dx
-//
-//     -4 e
-// C = ——————
-//     1 + e²
-//
-// x ∈ [-1, 1]
-//
-// Boundary conditions:
-//
-// u(-1) = 0  and  u(1) = 0
-//
-// Solution:
-//
-//         x   sinh(1)  2x   C
-// u(x) = e  - ——————— e   + —
-//             sinh(2)       4
-//
-// Reference:
-// * Gourgoulhon E (2005), An introduction to polynomial interpolation,
-//   School on spectral methods: Application to General Relativity and Field Theory
-//   Meudon, 14-18 November 2005
-
-fn main() -> Result<(), StrError> {
+/// Runs the simulation
+///
+/// This example corresponds to LORENE's example on page 25 of the Reference.
+///
+/// PDE:
+///
+/// ```text
+/// d²u     du          x
+/// ——— - 4 —— + 4 u = e  + C
+/// dx²     dx
+///
+///     -4 e
+/// C = ——————
+///     1 + e²
+///
+/// x ∈ [-1, 1]
+/// ```
+///
+/// Boundary conditions:
+///
+/// ```text
+/// u(-1) = 0  and  u(1) = 0
+/// ```
+///
+/// Solution:
+///
+/// ```text
+///         x   sinh(1)  2x   C
+/// u(x) = e  - ——————— e   + —
+///             sinh(2)       4
+/// ```
+///
+/// # Input
+///
+/// * `nn` -- polynomial degree `N`
+/// * `grid_type` -- the type of grid
+/// * `do_plot` -- generate plot
+/// * `calc_error` -- calculate the interpolation error
+///
+/// # Output
+///
+/// * `err_f` -- the interpolation error
+///
+/// # Reference
+///
+/// * Gourgoulhon E (2005), An introduction to polynomial interpolation,
+///   School on spectral methods: Application to General Relativity and Field Theory
+///   Meudon, 14-18 November 2005
+fn run(nn: usize, grid_type: InterpGrid, do_plot: bool, calc_error: bool) -> Result<f64, StrError> {
     // interpolant
-    let nn = 4;
-    let params = InterpParams::new();
+    let mut params = InterpParams::new();
+    params.grid_type = grid_type;
     let mut interp = InterpLagrange::new(nn, Some(params))?;
 
     // D1 and D2 matrices
@@ -72,41 +91,47 @@ fn main() -> Result<(), StrError> {
     const CC: f64 = -4.0 * NAPIER / (1.0 + NAPIER * NAPIER);
     let sh1 = f64::sinh(1.0);
     let sh2 = f64::sinh(2.0);
-    let solution = |x| f64::exp(x) - f64::exp(2.0 * x) * sh1 / sh2 + CC / 4.0;
-
-    // error at nodes
-    let uu_ana = xx.get_mapped(solution);
-    let max_diff = vec_max_abs_diff(&uu, &uu_ana)?;
-    println!("max diff = {}", format_scientific(max_diff.1, 10, 2));
-
-    // --------------------------------------------------------------------
+    let analytical = |x| f64::exp(x) - f64::exp(2.0 * x) * sh1 / sh2 + CC / 4.0;
 
     // plot
-    let mut curve_num1 = Curve::new();
-    let mut curve_num2 = Curve::new();
-    let mut curve_ana = Curve::new();
-    let xx_plt = Vector::linspace(-1.0, 1.0, 201)?;
-    let yy_num = xx_plt.get_mapped(|x| interp.eval(x, uu).unwrap());
-    let yy_ana = xx_plt.get_mapped(solution);
-    curve_ana
-        .set_label("analytical")
-        .draw(xx_plt.as_data(), yy_ana.as_data());
-    curve_num1
-        .set_label("numerical")
-        .draw(xx_plt.as_data(), yy_num.as_data());
-    curve_num2
-        .set_line_style("None")
-        .set_marker_style("o")
-        .set_marker_void(true)
-        .draw(xx.as_data(), uu.as_data());
-    let mut plot = Plot::new();
-    plot.add(&curve_ana)
-        .add(&curve_num1)
-        .add(&curve_num2)
-        .legend()
-        .grid_and_labels("$x$", "$u(x)$")
-        .set_title(format!("N = {}", nn).as_str())
-        .save(format!("{}.svg", PATH_KEY).as_str())?;
+    if do_plot {
+        let mut curve_num1 = Curve::new();
+        let mut curve_num2 = Curve::new();
+        let mut curve_ana = Curve::new();
+        let xx_plt = Vector::linspace(-1.0, 1.0, 201)?;
+        let yy_num = xx_plt.get_mapped(|x| interp.eval(x, uu).unwrap());
+        let yy_ana = xx_plt.get_mapped(analytical);
+        curve_ana
+            .set_label("analytical")
+            .draw(xx_plt.as_data(), yy_ana.as_data());
+        curve_num1
+            .set_label("numerical")
+            .draw(xx_plt.as_data(), yy_num.as_data());
+        curve_num2
+            .set_line_style("None")
+            .set_marker_style("o")
+            .set_marker_void(true)
+            .draw(xx.as_data(), uu.as_data());
+        let mut plot = Plot::new();
+        plot.add(&curve_ana)
+            .add(&curve_num1)
+            .add(&curve_num2)
+            .legend()
+            .grid_and_labels("$x$", "$u(x)$")
+            .set_title(format!("N = {}", nn).as_str())
+            .save(format!("{}.svg", PATH_KEY).as_str())?;
+    }
 
+    // done
+    let error = if calc_error {
+        interp.estimate_max_error(analytical)
+    } else {
+        0.0
+    };
+    Ok(error)
+}
+
+fn main() -> Result<(), StrError> {
+    run(4, InterpGrid::ChebyshevGaussLobatto, true, false)?;
     Ok(())
 }
