@@ -119,6 +119,7 @@ fn run(nn: usize, grid_type: InterpGrid, do_plot: bool, calc_error: bool) -> Res
             .legend()
             .grid_and_labels("$x$", "$u(x)$")
             .set_title(format!("N = {}", nn).as_str())
+            .set_figure_size_points(500.0, 300.0)
             .save(format!("{}.svg", PATH_KEY).as_str())?;
     }
 
@@ -132,6 +133,49 @@ fn run(nn: usize, grid_type: InterpGrid, do_plot: bool, calc_error: bool) -> Res
 }
 
 fn main() -> Result<(), StrError> {
+    // compare with LORENE
     run(4, InterpGrid::ChebyshevGaussLobatto, true, false)?;
+
+    // grid types
+    let grid_types = [
+        InterpGrid::Uniform,
+        InterpGrid::ChebyshevGauss,
+        InterpGrid::ChebyshevGaussLobatto,
+    ];
+
+    // error analysis
+    println!("\n... error analysis ...");
+    let mut curve_f = Curve::new();
+    for grid_type in &grid_types {
+        let gt = format!("{:?}", grid_type);
+        curve_f.set_label(&gt);
+        match grid_type {
+            InterpGrid::Uniform => {
+                curve_f.set_line_style(":");
+            }
+            InterpGrid::ChebyshevGauss => {
+                curve_f.set_line_style("--");
+            }
+            InterpGrid::ChebyshevGaussLobatto => {
+                curve_f.set_line_style("-");
+            }
+        };
+        let mut nn_values = Vec::new();
+        let mut ef_values = Vec::new();
+        for nn in (4..40).step_by(2) {
+            let err_f = run(nn, *grid_type, false, true)?;
+            nn_values.push(nn as f64);
+            ef_values.push(err_f);
+        }
+        curve_f.draw(&nn_values, &ef_values);
+        let mut plot = Plot::new();
+        plot.set_log_y(true)
+            .add(&curve_f)
+            .legend()
+            .grid_and_labels("$N$", "$error$")
+            .set_figure_size_points(500.0, 300.0)
+            .save(format!("{}_errors.svg", PATH_KEY).as_str())?;
+    }
+    println!("... done ...");
     Ok(())
 }
