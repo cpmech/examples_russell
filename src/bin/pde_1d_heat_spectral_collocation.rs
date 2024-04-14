@@ -112,50 +112,79 @@ fn run(
 }
 
 fn main() -> Result<(), StrError> {
+    // grid types
+    let grid_types = [
+        InterpGrid::Uniform,
+        InterpGrid::ChebyshevGauss,
+        InterpGrid::ChebyshevGaussLobatto,
+    ];
+
     // plot solutions
-    run(12, InterpGrid::Uniform, true, true, false)?;
-    run(12, InterpGrid::ChebyshevGauss, true, true, false)?;
-    run(12, InterpGrid::ChebyshevGaussLobatto, true, true, false)?;
+    for grid_type in &grid_types {
+        run(12, *grid_type, true, true, false)?;
+    }
 
     // error analysis
     println!("\n... error analysis ...");
     let mut curve_f = Curve::new();
     let mut curve_g = Curve::new();
     let mut curve_h = Curve::new();
-    curve_g.set_line_color("gold");
-    curve_h.set_line_color("red");
-    let mut nn_values = Vec::new();
-    let mut ef_values = Vec::new();
-    let mut eg_values = Vec::new();
-    let mut eh_values = Vec::new();
-    let grid_type = InterpGrid::ChebyshevGaussLobatto;
-    for nn in (4..40).step_by(2) {
-        let (err_f, err_g, err_h) = run(nn, grid_type, false, false, true)?;
-        nn_values.push(nn as f64);
-        ef_values.push(err_f);
-        eg_values.push(err_g);
-        eh_values.push(err_h);
+    for grid_type in &grid_types {
+        let gt = format!("{:?}", grid_type);
+        curve_f.set_label(&gt);
+        match grid_type {
+            InterpGrid::Uniform => {
+                curve_f.set_line_style(":");
+                curve_g.set_line_style(":");
+                curve_h.set_line_style(":");
+            }
+            InterpGrid::ChebyshevGauss => {
+                curve_f.set_line_style("--");
+                curve_g.set_line_style("--");
+                curve_h.set_line_style("--");
+            }
+            InterpGrid::ChebyshevGaussLobatto => {
+                curve_f.set_line_style("-");
+                curve_g.set_line_style("-");
+                curve_h.set_line_style("-");
+            }
+        };
+        let mut nn_values = Vec::new();
+        let mut ef_values = Vec::new();
+        let mut eg_values = Vec::new();
+        let mut eh_values = Vec::new();
+        for nn in (4..40).step_by(2) {
+            let (err_f, err_g, err_h) = run(nn, *grid_type, false, false, true)?;
+            nn_values.push(nn as f64);
+            ef_values.push(err_f);
+            eg_values.push(err_g);
+            eh_values.push(err_h);
+        }
+        curve_f.draw(&nn_values, &ef_values);
+        curve_g.draw(&nn_values, &eg_values);
+        curve_h.draw(&nn_values, &eh_values);
+        let mut plot = Plot::new();
+        let mut spp = SuperTitleParams::new();
+        spp.set_y(0.95);
+        plot.set_subplot(3, 1, 1)
+            .set_log_y(true)
+            .add(&curve_f)
+            .legend()
+            .grid_and_labels("$N$", "$err(f)$")
+            .set_subplot(3, 1, 2)
+            .set_log_y(true)
+            .add(&curve_g)
+            .legend()
+            .grid_and_labels("$N$", "$err(g)$")
+            .set_subplot(3, 1, 3)
+            .set_log_y(true)
+            .add(&curve_h)
+            .legend()
+            .grid_and_labels("$N$", "$err(h)$")
+            .set_figure_size_points(400.0, 600.0)
+            .set_super_title(gt.as_str(), Some(spp))
+            .save(format!("{}_errors.svg", PATH_KEY).as_str())?;
     }
-    curve_f.draw(&nn_values, &ef_values);
-    curve_g.draw(&nn_values, &eg_values);
-    curve_h.draw(&nn_values, &eh_values);
-    let mut plot = Plot::new();
-    let mut spp = SuperTitleParams::new();
-    spp.set_y(0.95);
-    plot.set_subplot(3, 1, 1)
-        .set_log_y(true)
-        .add(&curve_f)
-        .grid_and_labels("$N$", "$err(f)$")
-        .set_subplot(3, 1, 2)
-        .set_log_y(true)
-        .add(&curve_g)
-        .grid_and_labels("$N$", "$err(g)$")
-        .set_subplot(3, 1, 3)
-        .set_log_y(true)
-        .add(&curve_h)
-        .grid_and_labels("$N$", "$err(h)$")
-        .set_figure_size_points(400.0, 600.0)
-        .set_super_title(format!("{:?}", grid_type).as_str(), Some(spp))
-        .save(format!("{}_errors.svg", PATH_KEY).as_str())?;
+    println!("... done ...");
     Ok(())
 }
