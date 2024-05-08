@@ -2,7 +2,7 @@ use plotpy::{Curve, Plot, SuperTitleParams};
 use russell_lab::algo::{InterpGrid, InterpLagrange, InterpParams};
 use russell_lab::math::PI;
 use russell_lab::{mat_vec_mul, StrError, Vector};
-use russell_ode::{no_jacobian, HasJacobian, Method, OdeSolver, Params, System};
+use russell_ode::{no_jacobian, HasJacobian, Method, NoArgs, OdeSolver, Params, System};
 
 const PATH_KEY: &str = "/tmp/examples_russell/pde_1d_heat_spectral_collocation";
 
@@ -80,11 +80,12 @@ fn run(
     }
 
     // calc errors
-    let f = |x| -f64::exp(-PI * PI * t1) * f64::sin(PI * x);
-    let g = |x| -f64::exp(-PI * PI * t1) * f64::cos(PI * x) * PI;
-    let h = |x| f64::exp(-PI * PI * t1) * f64::sin(PI * x) * PI * PI;
+    let f = |x, _: &mut NoArgs| Ok(-f64::exp(-PI * PI * t1) * f64::sin(PI * x));
+    let g = |x, _: &mut NoArgs| Ok(-f64::exp(-PI * PI * t1) * f64::cos(PI * x) * PI);
+    let h = |x, _: &mut NoArgs| Ok(f64::exp(-PI * PI * t1) * f64::sin(PI * x) * PI * PI);
+    let aa = &mut 0;
     let (err_f, err_g, err_h) = if calc_errors {
-        args.interp.estimate_max_error_all(true, f, g, h)
+        args.interp.estimate_max_error_all(true, aa, f, g, h)?
     } else {
         (0.0, 0.0, 0.0)
     };
@@ -94,7 +95,7 @@ fn run(
         let mut curve1 = Curve::new();
         let mut curve2 = Curve::new();
         let xx_ana = Vector::linspace(-1.0, 1.0, 201)?;
-        let uu_ana = xx_ana.get_mapped(f);
+        let uu_ana = xx_ana.get_mapped(|x| f(x, aa).unwrap());
         curve1.draw(xx_ana.as_data(), uu_ana.as_data());
         curve2
             .set_line_style("None")

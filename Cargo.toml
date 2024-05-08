@@ -5,7 +5,8 @@ edition = "2021"
 
 [dependencies]
 rand = "0.8"
-russell_lab = "1.0"
-russell_stat = "1.0"
+russell_lab = "1.4"
+russell_ode = "1.4"
+russell_stat = "1.4"
 plotpy = "0.6"
 num-complex = "0.4"

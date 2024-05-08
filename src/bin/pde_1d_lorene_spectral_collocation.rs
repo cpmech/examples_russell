@@ -1,7 +1,7 @@
 use plotpy::{Curve, Plot};
 use russell_lab::algo::{InterpGrid, InterpLagrange, InterpParams};
 use russell_lab::math::NAPIER;
-use russell_lab::{solve_lin_sys, Matrix, StrError, Vector};
+use russell_lab::{solve_lin_sys, Matrix, NoArgs, StrError, Vector};
 
 const PATH_KEY: &str = "/tmp/examples_russell/pde_1d_lorene_spectral_collocation";
 
@@ -91,16 +91,17 @@ fn run(nn: usize, grid_type: InterpGrid, do_plot: bool, calc_error: bool) -> Res
     const CC: f64 = -4.0 * NAPIER / (1.0 + NAPIER * NAPIER);
     let sh1 = f64::sinh(1.0);
     let sh2 = f64::sinh(2.0);
-    let analytical = |x| f64::exp(x) - f64::exp(2.0 * x) * sh1 / sh2 + CC / 4.0;
+    let analytical = |x, _: &mut NoArgs| Ok(f64::exp(x) - f64::exp(2.0 * x) * sh1 / sh2 + CC / 4.0);
 
     // plot
+    let aa = &mut 0;
     if do_plot {
         let mut curve_num1 = Curve::new();
         let mut curve_num2 = Curve::new();
         let mut curve_ana = Curve::new();
         let xx_plt = Vector::linspace(-1.0, 1.0, 201)?;
         let yy_num = xx_plt.get_mapped(|x| interp.eval(x, uu).unwrap());
-        let yy_ana = xx_plt.get_mapped(analytical);
+        let yy_ana = xx_plt.get_mapped(|x| analytical(x, aa).unwrap());
         curve_ana
             .set_label("analytical")
             .draw(xx_plt.as_data(), yy_ana.as_data());
@@ -125,7 +126,7 @@ fn run(nn: usize, grid_type: InterpGrid, do_plot: bool, calc_error: bool) -> Res
 
     // done
     let error = if calc_error {
-        interp.estimate_max_error(analytical)
+        interp.estimate_max_error(aa, analytical)?
     } else {
         0.0
     };
